@@ -117,7 +117,7 @@ class LLMGeneratorService:
 
     async def _call_gemini(self, prompt: str, system: str = None) -> str:
         """Make async request to Google Gemini API"""
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.gemini_key}"
         
         payload = {
             "contents": [{"parts": [{"text": prompt}]}]
@@ -174,8 +174,8 @@ class LLMGeneratorService:
         if self.gemini_key:
             return {
                 "running": True,
-                "models": ["gemini-1.5-flash"],
-                "target_model": "gemini-1.5-flash",
+                "models": ["gemini-2.5-flash"],
+                "target_model": "gemini-2.5-flash",
                 "model_available": True,
                 "provider": "Gemini API"
             }
