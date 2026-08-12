@@ -34,6 +34,7 @@ class URLJDInput(BaseModel):
 
 class MatchRequest(BaseModel):
     job_id: str
+    resume_id: Optional[str] = None
     generate_email: bool = True
     generate_cover_letter: bool = False
 
@@ -54,7 +55,7 @@ async def submit_jd_pdf(
     db: AsyncSession = Depends(get_db)
 ):
     """Upload a PDF job description"""
-    if not file.filename.endswith(".pdf"):
+    if not file.filename or not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
     # Save to a cross-platform temp file
@@ -79,7 +80,7 @@ async def submit_jd_image(
 ):
     """Upload a screenshot/image of a job description (OCR)"""
     allowed_types = [".jpg", ".jpeg", ".png", ".webp", ".bmp"]
-    ext = os.path.splitext(file.filename)[1].lower()
+    ext = os.path.splitext(file.filename or "")[1].lower()
 
     if ext not in allowed_types:
         raise HTTPException(
@@ -146,7 +147,7 @@ async def match_jd_to_resumes(
     # RAG Step: Find best matching resumes
     logger.info(f"[MATCH] Matching job {payload.job_id} against resumes...")
     matches = retriever_service.find_best_resume_match(
-        job.description,
+        str(job.description),
         top_k=settings.top_k_results
     )
 
@@ -157,8 +158,16 @@ async def match_jd_to_resumes(
             "message": "No suitable resume found. Please upload relevant resumes."
         }
 
-    best_match = matches[0]
-    best_resume_id = best_match["resume_id"]
+    if payload.resume_id:
+        best_resume_id = payload.resume_id
+        best_match = next((m for m in matches if m["resume_id"] == payload.resume_id), {
+            "resume_id": payload.resume_id,
+            "score": 75.0,
+            "text": ""
+        })
+    else:
+        best_match = matches[0]
+        best_resume_id = best_match["resume_id"]
 
     # Fetch resume from DB for structured data
     res_result = await db.execute(select(Resume).where(Resume.id == best_resume_id))
@@ -169,7 +178,7 @@ async def match_jd_to_resumes(
     job_skills = job.skills_required or []
 
     detailed_match = retriever_service.compute_detailed_match(
-        job_skills, resume_skills, best_match["score"]
+        list(job_skills), list(resume_skills), float(best_match["score"])
     )
 
     # Build RAG context
@@ -184,12 +193,12 @@ async def match_jd_to_resumes(
         }
 
     rag_context = retriever_service.build_rag_context(
-        job.description, best_match, resume_db_dict
+        str(job.description), best_match, resume_db_dict
     )
 
-    candidate_name = resume_db.name if resume_db else "Applicant"
+    candidate_name = str(resume_db.name) if (resume_db and resume_db.name) else "Applicant"
 
-    response_data = {
+    response_data: dict = {
         "job_id": payload.job_id,
         "job_title": job.title,
         "company": job.company,
@@ -219,10 +228,10 @@ async def match_jd_to_resumes(
     if payload.generate_email:
         try:
             email_result = await llm_generator.generate_application_email(
-                jd_text=job.description,
+                jd_text=str(job.description),
                 resume_context=rag_context,
-                candidate_name=candidate_name,
-                match_score=best_match["score"]
+                candidate_name=str(candidate_name),
+                match_score=float(best_match["score"])
             )
             response_data["generated_email"] = email_result
 
@@ -253,9 +262,9 @@ async def match_jd_to_resumes(
     if payload.generate_cover_letter:
         try:
             cover_letter = await llm_generator.generate_cover_letter(
-                jd_text=job.description,
+                jd_text=str(job.description),
                 resume_context=rag_context,
-                candidate_name=candidate_name
+                candidate_name=str(candidate_name)
             )
             response_data["generated_cover_letter"] = cover_letter
         except Exception as e:
@@ -269,9 +278,9 @@ async def _process_jd(
     jd_text: str,
     db: AsyncSession,
     source: JobSource = JobSource.MANUAL,
-    source_url: str = None,
-    company: str = None,
-    title: str = None
+    source_url: Optional[str] = None,
+    company: Optional[str] = None,
+    title: Optional[str] = None
 ) -> dict:
     """Common JD processing: extract info, save to DB, embed"""
     # Extract structured info using LLM (with fallback)

@@ -1,13 +1,14 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
-import { jdApi } from '@/lib/api';
+import { jdApi, resumeApi } from '@/lib/api';
+import { AxiosError } from 'axios';
 import {
-  FileText, Image, Link, AlignLeft, Crosshair,
-  Upload, Zap, Copy, Send, RotateCcw, CheckCircle,
-  AlertCircle, ChevronRight
+  FileText, Image as ImageIcon, Link, AlignLeft, Crosshair,
+  Upload, Zap, Copy, Send, CheckCircle,
+  AlertCircle, ExternalLink
 } from 'lucide-react';
 
 type InputMode = 'text' | 'pdf' | 'image' | 'url';
@@ -26,7 +27,7 @@ interface MatchResult {
     matched_skills: string[];
     missing_skills: string[];
   };
-  all_matches: any[];
+  all_matches: { resume_id: string; score: number; metadata?: Record<string, unknown> }[];
   generated_email: { subject: string; body: string; error?: string } | null;
   generated_cover_letter: string | null;
   application_id?: string;
@@ -45,6 +46,15 @@ export default function JDMatcher() {
   const [recipientEmail, setRecipientEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [resumesList, setResumesList] = useState<{ id: string; original_filename?: string; filename?: string; name?: string }[]>([]);
+  const [switchingResume, setSwitchingResume] = useState(false);
+
+  useEffect(() => {
+    resumeApi.list().then(res => {
+      const list = Array.isArray(res.data) ? res.data : (res.data.resumes || []);
+      setResumesList(list);
+    }).catch(() => {});
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: files => setFile(files[0] ?? null),
@@ -58,7 +68,7 @@ export default function JDMatcher() {
     setLoading(true);
     setResult(null);
     try {
-      let jobRes: any;
+      let jobRes: { data: { id: string } };
 
       if (mode === 'text') {
         if (!text.trim()) { toast.error('Please enter a job description'); setLoading(false); return; }
@@ -81,8 +91,9 @@ export default function JDMatcher() {
       const matchRes = await jdApi.match(jobId, true, generateCoverLetter);
       setResult(matchRes.data);
       toast.success('Match complete!');
-    } catch (err: any) {
-      const msg = err?.response?.data?.detail || err.message || 'Something went wrong';
+    } catch (err: unknown) {
+      const error = err as AxiosError<{ detail?: string }>;
+      const msg = error?.response?.data?.detail || (err as Error).message || 'Something went wrong';
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -97,8 +108,9 @@ export default function JDMatcher() {
       const { emailApi } = await import('@/lib/api');
       await emailApi.send(result.application_id, recipientEmail);
       toast.success(`Email sent to ${recipientEmail}!`);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Send failed');
+    } catch (err: unknown) {
+      const error = err as AxiosError<{ detail?: string }>;
+      toast.error(error?.response?.data?.detail || 'Send failed');
     } finally {
       setSending(false);
     }
@@ -110,14 +122,13 @@ export default function JDMatcher() {
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  const scoreColor = (s: number) => s >= 75 ? '#10b981' : s >= 50 ? '#f59e0b' : '#f43f5e';
   const scoreClass = (s: number) => s >= 75 ? 'score-high' : s >= 50 ? 'score-mid' : 'score-low';
 
   const modes: { id: InputMode; label: string; icon: React.ReactNode }[] = [
-    { id: 'text',  label: 'Paste Text', icon: <AlignLeft  size={15} /> },
-    { id: 'pdf',   label: 'Upload PDF', icon: <FileText   size={15} /> },
-    { id: 'image', label: 'Screenshot', icon: <Image      size={15} /> },
-    { id: 'url',   label: 'From URL',   icon: <Link       size={15} /> },
+    { id: 'text',  label: 'Paste Text', icon: <AlignLeft   size={15} /> },
+    { id: 'pdf',   label: 'Upload PDF', icon: <FileText    size={15} /> },
+    { id: 'image', label: 'Screenshot', icon: <ImageIcon   size={15} /> },
+    { id: 'url',   label: 'From URL',   icon: <Link        size={15} /> },
   ];
 
   return (
@@ -228,9 +239,53 @@ export default function JDMatcher() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} className="fade-in">
             {/* Best match card */}
             <div className="glass-card" style={{ padding: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <CheckCircle size={16} color="var(--accent-emerald)" />
-                <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 14 }}>Best Match Found</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CheckCircle size={16} color="var(--accent-emerald)" />
+                  <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 14 }}>Matched Resume</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-violet)' }}>Change Resume:</span>
+                  <select
+                    className="input-field"
+                    style={{
+                      padding: '5px 12px', fontSize: 12, width: 'auto',
+                      background: 'var(--bg-secondary)', cursor: 'pointer',
+                      borderColor: 'rgba(139,92,246,0.4)', color: 'var(--text-primary)',
+                      fontWeight: 600, borderRadius: 8,
+                    }}
+                    value={result.best_match.resume_id}
+                    onChange={async e => {
+                      const newResumeId = e.target.value;
+                      if (!result.job_id) return;
+                      setSwitchingResume(true);
+                      const tid = toast.loading('Switching resume & regenerating email…');
+                      try {
+                        const res = await jdApi.match(result.job_id, true, generateCoverLetter, newResumeId);
+                        setResult(res.data);
+                        toast.success('Resume switched & email regenerated!', { id: tid });
+                      } catch (err: unknown) {
+                        const error = err as AxiosError<{ detail?: string }>;
+                        toast.error(error?.response?.data?.detail || 'Switch failed', { id: tid });
+                      } finally {
+                        setSwitchingResume(false);
+                      }
+                    }}
+                    disabled={switchingResume}
+                  >
+                    {resumesList.length > 0 ? (
+                      resumesList.map(r => (
+                        <option key={r.id} value={r.id}>
+                          {r.original_filename || r.filename || r.name || 'Resume'}
+                        </option>
+                      ))
+                    ) : (
+                      <option value={result.best_match.resume_id}>
+                        {result.best_match.resume_name}
+                      </option>
+                    )}
+                  </select>
+                </div>
               </div>
 
               {/* Score + resume */}
@@ -330,26 +385,51 @@ export default function JDMatcher() {
                   {result.generated_email.body}
                 </div>
 
-                {/* Send section */}
+                {/* Send & Gmail Draft section */}
                 {result.application_id && (
-                  <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
-                    <input
-                      className="input-field"
-                      style={{ flex: 1 }}
-                      placeholder="Recipient email (HR / hiring manager)"
-                      value={recipientEmail}
-                      onChange={e => setRecipientEmail(e.target.value)}
-                      type="email"
-                    />
-                    <button
-                      className="btn-primary"
-                      style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
-                      onClick={handleSend}
-                      disabled={sending || !recipientEmail}
-                    >
-                      {sending ? <div className="spinner" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white' }} /> : <Send size={14} />}
-                      Send Email
-                    </button>
+                  <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <input
+                        className="input-field"
+                        style={{ flex: 1, minWidth: 200 }}
+                        placeholder="Recipient email (HR / hiring manager)"
+                        value={recipientEmail}
+                        onChange={e => setRecipientEmail(e.target.value)}
+                        type="email"
+                      />
+                      <button
+                        className="btn-primary"
+                        style={{
+                          padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+                          background: 'linear-gradient(135deg, #ea4335 0%, #c5221f 100%)',
+                          boxShadow: '0 4px 14px rgba(234,67,53,0.35)',
+                        }}
+                        onClick={() => {
+                          const subject = result.generated_email?.subject || '';
+                          const rawBody = result.generated_email?.body || '';
+                          // Strip markdown bold/italic asterisks & underscores that LLM may output
+                          const body = rawBody
+                            .replace(/\*\*([^*]+)\*\*/g, '$1')
+                            .replace(/\*([^*]+)\*/g, '$1')
+                            .replace(/__([^_]+)__/g, '$1')
+                            .replace(/_([^_]+)_/g, '$1');
+                          const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipientEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                          window.open(gmailUrl, '_blank');
+                          toast.success('Opened in Gmail Draft!');
+                        }}
+                      >
+                        <ExternalLink size={15} /> Draft in Gmail
+                      </button>
+                      <button
+                        className="btn-ghost"
+                        style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+                        onClick={handleSend}
+                        disabled={sending || !recipientEmail}
+                      >
+                        {sending ? <div className="spinner" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white' }} /> : <Send size={14} />}
+                        Send via SMTP
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -372,7 +452,7 @@ export default function JDMatcher() {
               </div>
             )}
 
-            {/* Ollama warning */}
+            {/* AI Error Warning */}
             {result.generated_email?.error && (
               <div style={{
                 padding: '12px 16px', borderRadius: 10,
@@ -382,9 +462,9 @@ export default function JDMatcher() {
               }}>
                 <AlertCircle size={16} color="#f59e0b" style={{ flexShrink: 0, marginTop: 1 }} />
                 <div>
-                  <div style={{ fontWeight: 600, color: '#f59e0b', fontSize: 13 }}>Ollama not available</div>
+                  <div style={{ fontWeight: 600, color: '#f59e0b', fontSize: 13 }}>AI Generation Error</div>
                   <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>
-                    Ensure Ollama app is running, or start it in terminal with <code style={{ background: 'rgba(245,158,11,0.1)', padding: '0 5px', borderRadius: 3 }}>ollama serve</code>.
+                    {result.generated_email.error}
                   </div>
                 </div>
               </div>

@@ -1,0 +1,7 @@
+{
+  "venvPath": ".",
+  "venv": "venv",
+  "pythonVersion": "3.10",
+  "include": ["app"],
+  "exclude": ["venv", "chroma_db", "resumes", "__pycache__"]
+}

@@ -29,12 +29,6 @@ class ApplicationStatus(str, enum.Enum):
 
 
 class JobSource(str, enum.Enum):
-    LINKEDIN = "linkedin"
-    INDEED = "indeed"
-    GLASSDOOR = "glassdoor"
-    NAUKRI = "naukri"
-    ADZUNA = "adzuna"
-    REMOTIVE = "remotive"
     MANUAL = "manual"
     URL = "url"
     OTHER = "other"

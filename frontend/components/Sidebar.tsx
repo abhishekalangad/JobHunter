@@ -2,7 +2,7 @@
 
 import { ActiveView } from '@/app/page';
 import {
-  LayoutDashboard, FileText, Crosshair, Mail, Search, Bot, Zap
+  LayoutDashboard, FileText, Crosshair, Mail, Bot, Zap
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -15,7 +15,6 @@ const navItems: { id: ActiveView; label: string; icon: React.ReactNode; badge?: 
   { id: 'resumes',      label: 'Resumes',        icon: <FileText size={17} /> },
   { id: 'jd-match',     label: 'JD Matcher',     icon: <Crosshair size={17} />, badge: 'RAG' },
   { id: 'applications', label: 'Applications',   icon: <Mail size={17} /> },
-  { id: 'job-search',   label: 'Job Search',     icon: <Search size={17} /> },
 ];
 
 export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
@@ -88,7 +87,7 @@ export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-violet)' }}>Powered by AI</span>
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.8 }}>
-            Local AI / Cloud API<br/>
+            Google Gemini AI<br/>
             Your data is safe.
           </div>
         </div>

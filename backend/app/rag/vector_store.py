@@ -97,7 +97,7 @@ class VectorStoreService:
     def search_resumes(
         self,
         query_text: str,
-        top_k: int = None,
+        top_k: Optional[int] = None,
         filter_metadata: Optional[Dict] = None
     ) -> List[Dict[str, Any]]:
         """
@@ -116,16 +116,18 @@ class VectorStoreService:
             include=["documents", "metadatas", "distances"]
         )
 
-        if not results["ids"][0]:
+        ids = results["ids"][0] if results["ids"] else []
+        if not ids:
             return []
+
+        documents = results["documents"][0] if results["documents"] else []
+        metadatas = results["metadatas"][0] if results["metadatas"] else []
+        distances = results["distances"][0] if results["distances"] else []
 
         # Process and deduplicate by resume_id (keep best chunk per resume)
         resume_scores = {}
         for doc_id, doc, meta, distance in zip(
-            results["ids"][0],
-            results["documents"][0],
-            results["metadatas"][0],
-            results["distances"][0]
+            ids, documents, metadatas, distances
         ):
             resume_id = meta.get("resume_id", doc_id)
             # Convert distance to similarity (ChromaDB cosine distance: 0=identical)
@@ -152,7 +154,9 @@ class VectorStoreService:
         )
         chunks = []
         for doc_id, doc, meta in zip(
-            results["ids"], results["documents"], results["metadatas"]
+            results["ids"] or [],
+            results["documents"] or [],
+            results["metadatas"] or []
         ):
             chunks.append({"id": doc_id, "text": doc, "metadata": meta})
         return chunks
@@ -208,11 +212,12 @@ class VectorStoreService:
         )
 
         jobs = []
+        ids = results["ids"][0] if results["ids"] else []
+        documents = results["documents"][0] if results["documents"] else []
+        metadatas = results["metadatas"][0] if results["metadatas"] else []
+        distances = results["distances"][0] if results["distances"] else []
         for doc_id, doc, meta, distance in zip(
-            results["ids"][0],
-            results["documents"][0],
-            results["metadatas"][0],
-            results["distances"][0]
+            ids, documents, metadatas, distances
         ):
             jobs.append({
                 "job_id": doc_id,

@@ -6,9 +6,8 @@ import Dashboard from '@/components/Dashboard';
 import ResumeManager from '@/components/ResumeManager';
 import JDMatcher from '@/components/JDMatcher';
 import ApplicationTracker from '@/components/ApplicationTracker';
-import JobSearch from '@/components/JobSearch';
 
-export type ActiveView = 'dashboard' | 'resumes' | 'jd-match' | 'applications' | 'job-search';
+export type ActiveView = 'dashboard' | 'resumes' | 'jd-match' | 'applications';
 
 export default function Home() {
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
@@ -19,7 +18,6 @@ export default function Home() {
       case 'resumes':        return <ResumeManager />;
       case 'jd-match':       return <JDMatcher />;
       case 'applications':   return <ApplicationTracker />;
-      case 'job-search':     return <JobSearch />;
       default:               return <Dashboard onNavigate={setActiveView} />;
     }
   };

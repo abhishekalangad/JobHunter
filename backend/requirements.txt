@@ -26,8 +26,7 @@ pypdf==4.2.0
 # OCR
 easyocr==1.7.1
 
-# Web Scraping
-playwright==1.44.0
+# HTML parsing (for JD URL parsing)
 beautifulsoup4==4.12.3
 requests==2.32.2
 lxml==5.2.2

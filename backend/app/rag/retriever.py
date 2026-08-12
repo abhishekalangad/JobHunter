@@ -36,26 +36,45 @@ class RetrieverService:
             logger.warning("No resume matches found")
             return []
 
-        # Enrich results with additional matching context
+        # Enrich results with additional matching context & keyword scoring
         enriched_results = []
+        import re
+        jd_keywords = set(re.findall(r'\b[a-zA-Z0-9+#.]{2,}\b', jd_text.lower()))
+
         for result in raw_results:
             resume_id = result["resume_id"]
 
             # Get all chunks for context assembly
             all_chunks = vector_store.get_resume_chunks(resume_id)
             context_chunks = self._select_relevant_chunks(jd_text, all_chunks, top_n=5)
+            full_context = "\n\n".join([c["text"] for c in context_chunks])
+
+            # Calculate keyword match ratio
+            resume_words = set(re.findall(r'\b[a-zA-Z0-9+#.]{2,}\b', full_context.lower()))
+            matched_count = len(jd_keywords.intersection(resume_words))
+            keyword_score = (matched_count / max(len(jd_keywords), 1)) * 100
+
+            # Composite hybrid score: 50% semantic + 50% keyword overlap
+            semantic_score = result.get("score", 0.0)
+            hybrid_score = round((semantic_score * 0.5) + (keyword_score * 0.5), 2)
 
             enriched = {
                 **result,
+                "score": hybrid_score,
+                "semantic_score": semantic_score,
+                "keyword_score": round(keyword_score, 2),
                 "context_chunks": context_chunks,
-                "full_context": "\n\n".join([c["text"] for c in context_chunks]),
+                "full_context": full_context,
                 "chunk_count": len(all_chunks)
             }
             enriched_results.append(enriched)
 
+        # Re-rank by hybrid score descending so the resume with best keyword match is top #1
+        enriched_results.sort(key=lambda x: x["score"], reverse=True)
+
         logger.info(
-            f"✅ Found {len(enriched_results)} matches. "
-            f"Best score: {enriched_results[0]['score']:.1f}%"
+            f"✅ Ranked {len(enriched_results)} resume matches using hybrid vector+keyword scoring. "
+            f"Best hybrid score: {enriched_results[0]['score']:.1f}%"
         )
         return enriched_results
 

@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { emailApi } from '@/lib/api';
 import {
   Mail, Send, CheckCircle, XCircle, Clock, Star,
-  ChevronDown, ChevronUp, RefreshCw, Copy, Eye
+  ChevronDown, ChevronUp, RefreshCw, Copy, Eye, ExternalLink
 } from 'lucide-react';
 
 interface Application {
@@ -252,12 +252,12 @@ export default function ApplicationTracker() {
                         </div>
                       )}
 
-                      {/* Send section */}
+                      {/* Send & Draft section */}
                       {app.status !== 'sent' && (
-                        <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           <input
                             className="input-field"
-                            style={{ flex: 1 }}
+                            style={{ flex: 1, minWidth: 200 }}
                             placeholder="Recipient email"
                             value={recipientMap[app.id] || ''}
                             onChange={e => setRecipientMap(r => ({ ...r, [app.id]: e.target.value }))}
@@ -265,14 +265,38 @@ export default function ApplicationTracker() {
                           />
                           <button
                             className="btn-primary"
-                            style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 6 }}
+                            style={{
+                              padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+                              background: 'linear-gradient(135deg, #ea4335 0%, #c5221f 100%)',
+                              boxShadow: '0 4px 14px rgba(234,67,53,0.35)',
+                            }}
+                            onClick={() => {
+                              const subject = detailData[app.id]?.generated_subject || '';
+                              const rawBody = detailData[app.id]?.generated_email || '';
+                              // Strip markdown bold/italic asterisks & underscores that LLM may output
+                              const body = rawBody
+                                .replace(/\*\*([^*]+)\*\*/g, '$1')
+                                .replace(/\*([^*]+)\*/g, '$1')
+                                .replace(/__([^_]+)__/g, '$1')
+                                .replace(/_([^_]+)_/g, '$1');
+                              const recipient = recipientMap[app.id] || '';
+                              const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipient)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                              window.open(gmailUrl, '_blank');
+                              toast.success('Opened in Gmail Draft!');
+                            }}
+                          >
+                            <ExternalLink size={14} /> Draft in Gmail
+                          </button>
+                          <button
+                            className="btn-ghost"
+                            style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
                             onClick={() => handleSend(app.id)}
                             disabled={sendingId === app.id}
                           >
                             {sendingId === app.id
                               ? <div className="spinner" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white' }} />
                               : <Send size={14} />}
-                            Send
+                            Send via SMTP
                           </button>
                         </div>
                       )}

@@ -12,7 +12,7 @@ import os
 
 from app.config import settings
 from app.database.connection import init_db
-from app.routes import resume_routes, jd_routes, email_routes, job_routes
+from app.routes import resume_routes, jd_routes, email_routes
 
 
 # ─── Configure Logging ────────────────────────────────────────────────────────
@@ -104,7 +104,6 @@ app.add_middleware(
 app.include_router(resume_routes.router, prefix="/api/v1")
 app.include_router(jd_routes.router, prefix="/api/v1")
 app.include_router(email_routes.router, prefix="/api/v1")
-app.include_router(job_routes.router, prefix="/api/v1")
 
 
 # ─── Root & Health Endpoints ─────────────────────────────────────────────────

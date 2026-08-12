@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { systemApi } from '@/lib/api';
 import { ActiveView } from '@/app/page';
 import {
-  FileText, Crosshair, Mail, Search, TrendingUp,
-  CheckCircle, Clock, XCircle, Zap, ChevronRight, AlertCircle
+  FileText, Crosshair, Mail, TrendingUp,
+  CheckCircle, XCircle, Zap, ChevronRight, AlertCircle
 } from 'lucide-react';
 
 interface Stats {
@@ -17,13 +17,28 @@ interface Stats {
   jobs_embedded: number;
 }
 
+interface HealthStatus {
+  status: string;
+  database: string;
+  vector_store: { resume_chunks: number; job_postings: number };
+  ollama: {
+    running: boolean;
+    models: string[];
+    target_model: string;
+    model_available: boolean;
+    provider: string;
+  };
+  email: { connected: boolean; email: string };
+  embedding_model: string;
+}
+
 interface DashboardProps {
   onNavigate: (view: ActiveView) => void;
 }
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const [stats, setStats] = useState<Stats | null>(null);
-  const [health, setHealth] = useState<any>(null);
+  const [health, setHealth] = useState<HealthStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -53,9 +68,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     {
       label: 'Jobs Tracked',
       value: stats?.jobs ?? '—',
-      icon: <Search size={20} />,
+      icon: <Crosshair size={20} />,
       color: '#06b6d4',
-      action: () => onNavigate('job-search'),
+      action: () => onNavigate('jd-match'),
       sub: `${stats?.jobs_embedded ?? 0} indexed`,
     },
     {
@@ -79,15 +94,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   ];
 
   const quickActions = [
-    { label: 'Upload Resume', desc: 'Add a new CV to your library', view: 'resumes' as ActiveView, icon: <FileText size={16} />, color: '#8b5cf6' },
-    { label: 'Match a JD',    desc: 'Paste or upload a job description', view: 'jd-match' as ActiveView, icon: <Crosshair size={16} />, color: '#6366f1' },
-    { label: 'Search Jobs',   desc: 'Find fresh openings automatically', view: 'job-search' as ActiveView, icon: <Search size={16} />, color: '#06b6d4' },
-    { label: 'Track Apps',    desc: 'View sent applications & status', view: 'applications' as ActiveView, icon: <Mail size={16} />, color: '#10b981' },
+    { label: 'Upload Resume', desc: 'Add a new CV to your library',      view: 'resumes' as ActiveView,      icon: <FileText size={16} />,   color: '#8b5cf6' },
+    { label: 'Match a JD',    desc: 'Paste or upload a job description', view: 'jd-match' as ActiveView,     icon: <Crosshair size={16} />,  color: '#6366f1' },
+    { label: 'Track Apps',    desc: 'View sent applications & status',   view: 'applications' as ActiveView, icon: <Mail size={16} />,       color: '#10b981' },
   ];
 
   const llmProvider = health?.ollama?.provider || 'Ollama';
-  const ollamaOk   = health?.ollama?.running && health?.ollama?.model_available;
-  const ollamaWarn = health?.ollama?.running && !health?.ollama?.model_available;
+  const ollamaOk   = !!(health?.ollama?.running && health?.ollama?.model_available);
+  const ollamaWarn = !!(health?.ollama?.running && !health?.ollama?.model_available);
   const ollamaDown = !health?.ollama?.running;
 
   return (
@@ -116,22 +130,22 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             icon={<CheckCircle size={12} />}
           />
           <StatusPill
-            label={ollamaOk ? `${llmProvider} (${health.ollama?.target_model})` : ollamaWarn ? `${llmProvider} (model missing)` : `${llmProvider} (offline)`}
+            label={health.ollama?.provider === 'Gemini API' ? 'Gemini API (gemini-2.5-flash)' : ollamaOk ? `${llmProvider} (${health.ollama?.target_model})` : ollamaWarn ? `${llmProvider} (model missing)` : `${llmProvider} (offline)`}
             ok={ollamaOk}
             warn={ollamaWarn}
             icon={ollamaDown ? <XCircle size={12} /> : ollamaOk ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
           />
           <StatusPill
             label={health.email?.connected ? `Gmail (${health.email?.email})` : 'Gmail (not configured)'}
-            ok={health.email?.connected}
+            ok={!!health.email?.connected}
             warn={!health.email?.connected}
             icon={health.email?.connected ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
           />
           <StatusPill label="ChromaDB" ok={true} icon={<CheckCircle size={12} />} />
 
-          {ollamaDown && (
+          {ollamaDown && health.ollama?.provider !== 'Gemini API' && (
             <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--accent-amber)' }}>
-              ⚠ Run <code style={{ background: 'rgba(245,158,11,0.1)', padding: '1px 6px', borderRadius: 4 }}>ollama serve</code> to enable AI generation
+              ⚠ Run <code style={{ background: 'rgba(245,158,11,0.1)', padding: '1px 6px', borderRadius: 4 }}>ollama serve</code> or configure GEMINI_API_KEY
             </span>
           )}
         </div>

@@ -1,0 +1,175 @@
+================================================================================
+ AI JOB HUNTER — COMPLETE SYSTEM EXPLANATION & INTERVIEW PREPARATION GUIDE
+================================================================================
+
+This document is specifically designed to help you explain this project in a job
+interview step-by-step, justifying every tech choice, data flow, and architecture decision.
+
+--------------------------------------------------------------------------------
+1. THE 30-SECOND ELEVATOR PITCH (How to start explaining the project)
+--------------------------------------------------------------------------------
+"AI Job Hunter is a full-stack, RAG-powered recruitment automation platform.
+It solves the problem of sending generic job applications by using AI to analyze
+my resume library against any target job description. The system computes a semantic
+similarity match score, retrieves relevant resume context using a ChromaDB vector 
+database, and generates custom, highly targeted application emails and cover 
+letters using the Google Gemini 2.5 Flash API. Finally, it handles direct email 
+dispatching via Gmail SMTP and tracks application status in real-time."
+
+
+--------------------------------------------------------------------------------
+2. HIGH-LEVEL ARCHITECTURE (The 4 Main Layers)
+--------------------------------------------------------------------------------
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. FRONTEND LAYER : Next.js 16 (React 19, TypeScript, Tailwind CSS, Axios)  │
+└──────────────────────┬──────────────────────────────────────────────────────┘
+                       │ HTTP REST APIs (JSON / Multipart)
+┌──────────────────────▼──────────────────────────────────────────────────────┐
+│ 2. BACKEND LAYER  : Python 3.11 + FastAPI + Uvicorn + SQLAlchemy (Async)    │
+└──────────────────────┬──────────────────────────────────────────────────────┘
+                       │ Vector Query / Embedding Generation / Parsing
+┌──────────────────────▼──────────────────────────────────────────────────────┐
+│ 3. AI & RAG LAYER : ChromaDB + Sentence-Transformers + LangChain           │
+│                     + Google Gemini API (gemini-2.5-flash)                  │
+└──────────────────────┬──────────────────────────────────────────────────────┘
+                       │ Data Persistence & Dispatch
+┌──────────────────────▼──────────────────────────────────────────────────────┐
+│ 4. STORAGE & MAIL : SQLite (job_hunter.db) + Python SMTP (Gmail TLS)        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+--------------------------------------------------------------------------------
+3. STEP-BY-STEP TECHNICAL DATA FLOW (Walkthrough for Interviewer)
+--------------------------------------------------------------------------------
+
+STEP 1: RESUME INGESTION & VECTOR EMBEDDING PIPELINE
+--------------------------------------------------
+1. User uploads a resume (PDF or DOCX) in the Next.js React frontend.
+2. The frontend sends a multipart POST request to `/api/v1/resumes/upload`.
+3. The backend uses `pdfplumber` (for PDFs) or `python-docx` (for Word files) 
+   to parse raw text while preserving formatting.
+4. The text is divided into chunks (500 characters each with 50-character overlap) 
+   to maintain context boundaries.
+5. `sentence-transformers` (`all-MiniLM-L6-v2` model) converts each text chunk 
+   into a 384-dimensional dense vector embedding.
+6. Vector embeddings and original text chunks are stored persistently inside 
+   ChromaDB vector database (`backend/chroma_db`).
+7. Metadata is saved in the SQLite database (`job_hunter.db`) via SQLAlchemy Async.
+
+STEP 2: JOB DESCRIPTION (JD) MULTI-MODAL PARSING
+--------------------------------------------------
+The system supports 4 input formats for any Job Description:
+- Text: Processed directly.
+- PDF: Parsed via `pdfplumber`.
+- Image Screenshot: Processed via `EasyOCR` + `Pillow` to extract text from images.
+- Web URL: Web page scraped using `BeautifulSoup4` + `lxml`.
+
+STEP 3: RAG RETRIEVAL & SEMANTIC SIMILARITY SCORING
+--------------------------------------------------
+1. When a JD is submitted, the system converts the JD text into a 384d vector using 
+   the same `all-MiniLM-L6-v2` embedding model.
+2. The backend queries ChromaDB using Cosine Similarity Search to retrieve the Top-K 
+   (5 most relevant) resume chunks from the resume library.
+3. Similarity scores are calculated using `scikit-learn` & `NumPy` to generate an 
+   overall Match Percentage (0% to 100%).
+
+STEP 4: CONTEXT-GROUNDED AI GENERATION
+--------------------------------------------------
+1. LangChain constructs an engineered prompt combining:
+   - The Top-K retrieved resume chunks (Context)
+   - The Job Description requirements
+   - System instructions ("Generate a professional, non-hallucinated cold email")
+2. The prompt is sent asynchronously to the Google Gemini API (`gemini-2.5-flash`).
+3. The Gemini API returns a structured response containing:
+   - Email Subject Line
+   - Tailored Cold Email Body
+   - Optional Cover Letter
+
+STEP 5: DIRECT DISPATCH & APPLICATION TRACKING
+--------------------------------------------------
+1. User reviews the draft email on the Applications page in Next.js.
+2. User clicks "Send Email".
+3. Backend uses Python `smtplib` with SSL/TLS encryption to send the email via Gmail SMTP.
+4. Attached resume PDF is automatically included in the email.
+5. Application status updates from "Draft" -> "Sent" in `job_hunter.db`.
+
+
+--------------------------------------------------------------------------------
+4. TECH STACK JUSTIFICATION ("Why did you choose technology X?")
+--------------------------------------------------------------------------------
+
+Q: Why FastAPI over Flask or Django?
+A: "FastAPI natively supports Python asyncio, which is essential when doing non-blocking 
+   I/O operations like document parsing, vector database queries, and API calls. 
+   It also provides automatic Pydantic data validation and auto-generated Swagger UI docs."
+
+Q: Why Next.js & React over standard HTML/JS?
+A: "Next.js 16 with App Router gives us server-side optimization, fast Turbopack bundling, 
+   and clean component-based architecture with React 19. Combined with TypeScript, 
+   it prevents runtime errors across our frontend data models."
+
+Q: Why ChromaDB over cloud vector stores like Pinecone?
+A: "ChromaDB is open-source, runs 100% locally on disk, has zero API costs, and offers 
+   ultra-low latency for local similarity search without sending sensitive resume 
+   data to third-party cloud vector hosts."
+
+Q: Why Sentence-Transformers (all-MiniLM-L6-v2)?
+A: "It produces compact 384-dimensional embeddings, has a tiny memory footprint, runs 
+   blazing fast on standard CPUs, and achieves excellent semantic retrieval performance 
+   for technical and resume vocabulary."
+
+Q: Why Google Gemini API (gemini-2.5-flash)?
+A: "Google Gemini 2.5 Flash is lightweight, blazing fast, highly intelligent, and requires 
+   zero heavy local hardware resources (unlike local LLMs which consume gigabytes of RAM/VRAM). 
+   It provides reliable, ultra-fast cold email generation via cloud API."
+
+
+--------------------------------------------------------------------------------
+5. KEY ENGINEERING CHALLENGES & SOLUTIONS (Great for Interviews)
+--------------------------------------------------------------------------------
+
+CHALLENGE 1: Preventing AI Hallucinations in Generated Emails
+Solution  : "By implementing Retrieval-Augmented Generation (RAG), we constrain Gemini's 
+            context window to ONLY the candidate's actual retrieved resume chunks. 
+            The system prompt explicitly forbids inventing experience not present in the vector context."
+
+CHALLENGE 2: Multi-Format Document Ingestion
+Solution  : "Recruiters share JDs as images, links, or PDFs. I built a multi-modal parser pipeline 
+            leveraging EasyOCR for images, pdfplumber for PDFs, and BeautifulSoup4 for URL scraping, 
+            normalizing all inputs into clean raw text."
+
+CHALLENGE 3: Seamless Dual-Server Windows Execution
+Solution  : "Created a custom `start.bat` script that uses explicit working directory parameters (`/D`) 
+            to start FastAPI backend (port 8000) and Next.js frontend (port 3000) simultaneously, 
+            avoiding command shell quote-stripping issues on Windows."
+
+
+--------------------------------------------------------------------------------
+6. QUICK SUMMARY TABLE OF ALL LIBRARIES & VERSIONS
+--------------------------------------------------------------------------------
+
+FRONTEND:
+- Next.js (v16.2.6)        : Application framework
+- React (v19.2.4)          : UI library
+- TypeScript (v5.0)        : Static typing
+- Tailwind CSS (v4.0)      : Dark mode styling
+- Framer Motion (v12.38.0) : Animations
+- Lucide React (v1.14.0)   : Icons
+- Recharts (v3.8.1)        : Dashboard charts
+- React Dropzone (v15.0.0) : Drag-and-drop uploads
+- Axios (v1.16.0)          : REST API client
+
+BACKEND & AI:
+- Python (v3.11)           : Core language
+- FastAPI (v0.111.0)       : Async Web REST API
+- Uvicorn (v0.29.0)        : ASGI web server
+- ChromaDB (v0.5.0)        : Local vector database
+- Sentence-Transformers    : Text embedding engine (all-MiniLM-L6-v2)
+- LangChain (v0.2.1)       : LLM orchestration & prompt engineering
+- Google Gemini API        : Cloud LLM engine (gemini-2.5-flash)
+- EasyOCR & pdfplumber     : Document OCR & PDF text extraction
+- SQLAlchemy (v2.0.30)     : Async database ORM
+- SQLite                   : Persistent relational database (job_hunter.db)
+- smtplib (Python Native)  : Direct Gmail SMTP email dispatch
+
+================================================================================
